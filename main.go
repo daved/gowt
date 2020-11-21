@@ -230,13 +230,13 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/", Index)
-	mux.HandleFunc("/show", Show)
-	mux.HandleFunc("/new", New)
-	mux.HandleFunc("/edit", Edit)
-	mux.HandleFunc("/insert", Insert)
-	mux.HandleFunc("/update", Update)
-	mux.HandleFunc("/delete", Delete)
+	mux.Handle("/", http.HandlerFunc(Index))
+	mux.Handle("/show", http.HandlerFunc(Show))
+	mux.Handle("/new", http.HandlerFunc(New))
+	mux.Handle("/edit", http.HandlerFunc(Edit))
+	mux.Handle("/insert", http.HandlerFunc(Insert))
+	mux.Handle("/update", http.HandlerFunc(Update))
+	mux.Handle("/delete", http.HandlerFunc(Delete))
 
 	http.ListenAndServe(":8080", mux)
 }
