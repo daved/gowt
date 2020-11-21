@@ -2,14 +2,18 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"fmt"
-	"log"
+	"io/ioutil"
+	xlog "log"
 	"net/http"
 	"os"
 	"text/template"
 
 	_ "github.com/go-sql-driver/mysql"
 )
+
+var log = xlog.New(ioutil.Discard, "", xlog.LstdFlags)
 
 // Tool struct
 type Tool struct {
@@ -46,15 +50,19 @@ var tmpl = template.Must(template.ParseGlob("templates/*"))
 
 var noDBMsg = "no db conn"
 
-//Index handler
-func Index(w http.ResponseWriter, r *http.Request) {
-	db, err := dbConn()
-	if err != nil {
-		fmt.Fprint(w, noDBMsg)
-		return
-	}
+type toolSvc struct {
+	db *sql.DB
+}
 
-	selDB, err := db.Query("SELECT * FROM tools ORDER BY id DESC")
+func newToolSvc(db *sql.DB) *toolSvc {
+	return &toolSvc{
+		db: db,
+	}
+}
+
+//Index handler
+func (s *toolSvc) Index(w http.ResponseWriter, r *http.Request) {
+	selDB, err := s.db.Query("SELECT * FROM tools ORDER BY id DESC")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -80,19 +88,12 @@ func Index(w http.ResponseWriter, r *http.Request) {
 		res = append(res, tool)
 	}
 	tmpl.ExecuteTemplate(w, "Index", res)
-	defer db.Close()
 }
 
 //Show handler
-func Show(w http.ResponseWriter, r *http.Request) {
-	db, err := dbConn()
-	if err != nil {
-		fmt.Fprint(w, noDBMsg)
-		return
-	}
-
+func (s *toolSvc) Show(w http.ResponseWriter, r *http.Request) {
 	nId := r.URL.Query().Get("id")
-	selDB, err := db.Query("SELECT * FROM tools WHERE id=?", nId)
+	selDB, err := s.db.Query("SELECT * FROM tools WHERE id=?", nId)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -117,22 +118,15 @@ func Show(w http.ResponseWriter, r *http.Request) {
 		tool.Notes = notes
 	}
 	tmpl.ExecuteTemplate(w, "Show", tool)
-	defer db.Close()
 }
 
 func New(w http.ResponseWriter, r *http.Request) {
 	tmpl.ExecuteTemplate(w, "New", nil)
 }
 
-func Edit(w http.ResponseWriter, r *http.Request) {
-	db, err := dbConn()
-	if err != nil {
-		fmt.Fprint(w, noDBMsg)
-		return
-	}
-
+func (s *toolSvc) Edit(w http.ResponseWriter, r *http.Request) {
 	nId := r.URL.Query().Get("id")
-	selDB, err := db.Query("SELECT * FROM tools WHERE id=?", nId)
+	selDB, err := s.db.Query("SELECT * FROM tools WHERE id=?", nId)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -156,39 +150,26 @@ func Edit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tmpl.ExecuteTemplate(w, "Edit", tool)
-	defer db.Close()
 }
 
-func Insert(w http.ResponseWriter, r *http.Request) {
-	db, err := dbConn()
-	if err != nil {
-		fmt.Fprint(w, noDBMsg)
-		return
-	}
-
+func (s *toolSvc) Insert(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		name := r.FormValue("name")
 		category := r.FormValue("category")
 		url := r.FormValue("url")
 		rating := r.FormValue("rating")
 		notes := r.FormValue("notes")
-		insForm, err := db.Prepare("INSERT INTO tools (name, category, url, rating, notes) VALUES (?, ?, ?, ?, ?)")
+		insForm, err := s.db.Prepare("INSERT INTO tools (name, category, url, rating, notes) VALUES (?, ?, ?, ?, ?)")
 		if err != nil {
 			panic(err.Error())
 		}
 		insForm.Exec(name, category, url, rating, notes)
 		log.Println("Insert Data: name " + name + " | category " + category + " | url " + url + " | rating " + rating + " | notes " + notes)
 	}
-	defer db.Close()
 	http.Redirect(w, r, "/", 301)
 }
 
-func Update(w http.ResponseWriter, r *http.Request) {
-	db, err := dbConn()
-	if err != nil {
-		fmt.Fprint(w, noDBMsg)
-		return
-	}
+func (s *toolSvc) Update(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		name := r.FormValue("name")
 		category := r.FormValue("category")
@@ -196,47 +177,57 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		rating := r.FormValue("rating")
 		notes := r.FormValue("notes")
 		id := r.FormValue("uid")
-		insForm, err := db.Prepare("UPDATE tools SET name=?, category=?, url=?, rating=?, notes=? WHERE id=?")
+		insForm, err := s.db.Prepare("UPDATE tools SET name=?, category=?, url=?, rating=?, notes=? WHERE id=?")
 		if err != nil {
 			panic(err.Error())
 		}
 		insForm.Exec(name, category, url, rating, notes, id)
 		log.Println("UPDATE Data: name " + name + " | category " + category + " | url " + url + " | rating " + rating + " | notes " + notes)
 	}
-	defer db.Close()
 	http.Redirect(w, r, "/", 301)
 }
 
-func Delete(w http.ResponseWriter, r *http.Request) {
-	db, err := dbConn()
-	if err != nil {
-		fmt.Fprint(w, noDBMsg)
-		return
-	}
-
+func (s *toolSvc) Delete(w http.ResponseWriter, r *http.Request) {
 	tool := r.URL.Query().Get("id")
-	delForm, err := db.Prepare("DELETE FROM tools WHERE id=?")
+	delForm, err := s.db.Prepare("DELETE FROM tools WHERE id=?")
 	if err != nil {
 		panic(err.Error())
 	}
 	delForm.Exec(tool)
 	log.Println("DELETE " + tool)
-	defer db.Close()
 	http.Redirect(w, r, "/", 301)
 }
 
 func main() {
+	var (
+		debug bool
+	)
+
+	flag.BoolVar(&debug, "debug", debug, "turn on debug logging")
+	flag.Parse()
+
+	if debug {
+		log = xlog.New(os.Stdout, "", xlog.LstdFlags)
+	}
+
 	log.Println("Server started on: http://localhost:8080")
+
+	db, err := dbConn()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+	}
+
+	tSvc := newToolSvc(db)
 
 	mux := http.NewServeMux()
 
-	mux.Handle("/", http.HandlerFunc(Index))
-	mux.Handle("/show", http.HandlerFunc(Show))
+	mux.Handle("/", http.HandlerFunc(tSvc.Index))
+	mux.Handle("/show", http.HandlerFunc(tSvc.Show))
 	mux.Handle("/new", http.HandlerFunc(New))
-	mux.Handle("/edit", http.HandlerFunc(Edit))
-	mux.Handle("/insert", http.HandlerFunc(Insert))
-	mux.Handle("/update", http.HandlerFunc(Update))
-	mux.Handle("/delete", http.HandlerFunc(Delete))
+	mux.Handle("/edit", http.HandlerFunc(tSvc.Edit))
+	mux.Handle("/insert", http.HandlerFunc(tSvc.Insert))
+	mux.Handle("/update", http.HandlerFunc(tSvc.Update))
+	mux.Handle("/delete", http.HandlerFunc(tSvc.Delete))
 
 	http.ListenAndServe(":8080", mux)
 }
