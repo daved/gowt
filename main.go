@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -20,7 +21,9 @@ type Tool struct {
 	Notes    string
 }
 
-func dbConn() (db *sql.DB) {
+func dbConn() (*sql.DB, error) {
+	efmt := "dbconn: %w"
+
 	dbDriver := "mysql"
 	dbUser := os.Getenv("DATABASE_USERNAME")
 	dbPass := os.Getenv("DATABASE_PASSWORD")
@@ -29,16 +32,28 @@ func dbConn() (db *sql.DB) {
 	dbPort := os.Getenv("DATABASE_PORT")
 	db, err := sql.Open(dbDriver, dbUser+":"+dbPass+"@tcp("+dbServer+":"+dbPort+")/"+dbName)
 	if err != nil {
-		panic(err.Error())
+		return nil, fmt.Errorf(efmt, err)
 	}
-	return db
+
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf(efmt, err)
+	}
+
+	return db, nil
 }
 
 var tmpl = template.Must(template.ParseGlob("templates/*"))
 
+var noDBMsg = "no db conn"
+
 //Index handler
 func Index(w http.ResponseWriter, r *http.Request) {
-	db := dbConn()
+	db, err := dbConn()
+	if err != nil {
+		fmt.Fprint(w, noDBMsg)
+		return
+	}
+
 	selDB, err := db.Query("SELECT * FROM tools ORDER BY id DESC")
 	if err != nil {
 		panic(err.Error())
@@ -70,7 +85,12 @@ func Index(w http.ResponseWriter, r *http.Request) {
 
 //Show handler
 func Show(w http.ResponseWriter, r *http.Request) {
-	db := dbConn()
+	db, err := dbConn()
+	if err != nil {
+		fmt.Fprint(w, noDBMsg)
+		return
+	}
+
 	nId := r.URL.Query().Get("id")
 	selDB, err := db.Query("SELECT * FROM tools WHERE id=?", nId)
 	if err != nil {
@@ -105,7 +125,12 @@ func New(w http.ResponseWriter, r *http.Request) {
 }
 
 func Edit(w http.ResponseWriter, r *http.Request) {
-	db := dbConn()
+	db, err := dbConn()
+	if err != nil {
+		fmt.Fprint(w, noDBMsg)
+		return
+	}
+
 	nId := r.URL.Query().Get("id")
 	selDB, err := db.Query("SELECT * FROM tools WHERE id=?", nId)
 	if err != nil {
@@ -135,7 +160,12 @@ func Edit(w http.ResponseWriter, r *http.Request) {
 }
 
 func Insert(w http.ResponseWriter, r *http.Request) {
-	db := dbConn()
+	db, err := dbConn()
+	if err != nil {
+		fmt.Fprint(w, noDBMsg)
+		return
+	}
+
 	if r.Method == "POST" {
 		name := r.FormValue("name")
 		category := r.FormValue("category")
@@ -154,7 +184,11 @@ func Insert(w http.ResponseWriter, r *http.Request) {
 }
 
 func Update(w http.ResponseWriter, r *http.Request) {
-	db := dbConn()
+	db, err := dbConn()
+	if err != nil {
+		fmt.Fprint(w, noDBMsg)
+		return
+	}
 	if r.Method == "POST" {
 		name := r.FormValue("name")
 		category := r.FormValue("category")
@@ -174,7 +208,12 @@ func Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func Delete(w http.ResponseWriter, r *http.Request) {
-	db := dbConn()
+	db, err := dbConn()
+	if err != nil {
+		fmt.Fprint(w, noDBMsg)
+		return
+	}
+
 	tool := r.URL.Query().Get("id")
 	delForm, err := db.Prepare("DELETE FROM tools WHERE id=?")
 	if err != nil {
@@ -188,12 +227,16 @@ func Delete(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	log.Println("Server started on: http://localhost:8080")
-	http.HandleFunc("/", Index)
-	http.HandleFunc("/show", Show)
-	http.HandleFunc("/new", New)
-	http.HandleFunc("/edit", Edit)
-	http.HandleFunc("/insert", Insert)
-	http.HandleFunc("/update", Update)
-	http.HandleFunc("/delete", Delete)
-	http.ListenAndServe(":8080", nil)
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", Index)
+	mux.HandleFunc("/show", Show)
+	mux.HandleFunc("/new", New)
+	mux.HandleFunc("/edit", Edit)
+	mux.HandleFunc("/insert", Insert)
+	mux.HandleFunc("/update", Update)
+	mux.HandleFunc("/delete", Delete)
+
+	http.ListenAndServe(":8080", mux)
 }
