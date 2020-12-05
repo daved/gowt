@@ -49,15 +49,33 @@ func dbConn() (*sql.DB, error) {
 
 var noDBMsg = "no db conn"
 
+type tmpl struct {
+	*template.Template
+}
+
+func (t *tmpl) WriteTemplate(w http.ResponseWriter, name string, v interface{}) {
+	var b bytes.Buffer
+
+	if err := t.Template.ExecuteTemplate(&b, name, v); err != nil {
+		log.Printf("write template: %v\n", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := w.Write(b.Bytes()); err != nil {
+		log.Printf("write template: %v\n", err) // maybe notify ops if occurs
+	}
+}
+
 type toolSvc struct {
 	db *sql.DB
-	t  *template.Template
+	t  *tmpl
 }
 
 func newToolSvc(db *sql.DB, t *template.Template) *toolSvc {
 	return &toolSvc{
 		db: db,
-		t:  t,
+		t:  &tmpl{t},
 	}
 }
 
@@ -89,7 +107,7 @@ func (s *toolSvc) Index(w http.ResponseWriter, r *http.Request) {
 		res = append(res, tool)
 	}
 
-	_ = s.t.ExecuteTemplate(w, "Index", res)
+	s.t.WriteTemplate(w, "Index", res)
 }
 
 //Show handler
@@ -121,19 +139,11 @@ func (s *toolSvc) Show(w http.ResponseWriter, r *http.Request) {
 		tool.Notes = notes
 	}
 
-	_ = s.t.ExecuteTemplate(w, "Show", tool) //nolint
+	s.t.WriteTemplate(w, "Show", tool)
 }
 
 func (s *toolSvc) New(w http.ResponseWriter, r *http.Request) {
-	var b bytes.Buffer
-
-	if err := s.t.ExecuteTemplate(&b, "New", nil); err != nil {
-		log.Println("proven to fail", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	w.Write(b.Bytes()) //nolint
+	s.t.WriteTemplate(w, "New", nil)
 }
 
 func (s *toolSvc) Edit(w http.ResponseWriter, r *http.Request) {
@@ -161,7 +171,7 @@ func (s *toolSvc) Edit(w http.ResponseWriter, r *http.Request) {
 		tool.Notes = notes
 	}
 
-	_ = s.t.ExecuteTemplate(w, "Edit", tool) //nolint
+	s.t.WriteTemplate(w, "Edit", tool)
 }
 
 func (s *toolSvc) Insert(w http.ResponseWriter, r *http.Request) {
