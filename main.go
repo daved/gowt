@@ -10,6 +10,8 @@ import (
 	"text/template"
 
 	_ "github.com/go-sql-driver/mysql"
+
+	"github.com/daved/gowt/toolsvc"
 )
 
 var log = xlog.New(ioutil.Discard, "", xlog.LstdFlags)
@@ -41,7 +43,7 @@ func main() {
 		return
 	}
 
-	tSvc := newToolSvc(db, t)
+	tSvc := toolsvc.New(log, db, t)
 
 	mux := http.NewServeMux()
 
