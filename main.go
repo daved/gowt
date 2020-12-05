@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -124,7 +125,15 @@ func (s *toolSvc) Show(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *toolSvc) New(w http.ResponseWriter, r *http.Request) {
-	_ = s.t.ExecuteTemplate(w, "New", nil) //nolint
+	var b bytes.Buffer
+
+	if err := s.t.ExecuteTemplate(&b, "New", nil); err != nil {
+		log.Println("proven to fail", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(b.Bytes()) //nolint
 }
 
 func (s *toolSvc) Edit(w http.ResponseWriter, r *http.Request) {
@@ -221,7 +230,8 @@ func main() {
 		return
 	}
 
-	t, err := template.ParseGlob("templates/*")
+	t := template.New("all")
+	t, err = t.ParseGlob("templates/*")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
