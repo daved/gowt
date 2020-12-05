@@ -1,4 +1,4 @@
-package main
+package dbase
 
 import (
 	"database/sql"
@@ -6,8 +6,12 @@ import (
 	"os"
 )
 
-func dbConn() (*sql.DB, error) {
-	efmt := "dbconn: %w"
+type DBase struct {
+	*sql.DB
+}
+
+func New() (*DBase, error) {
+	efmt := "new dbase: %w"
 
 	dbDriver := "mysql"
 	dbUser := os.Getenv("DATABASE_USERNAME")
@@ -24,5 +28,5 @@ func dbConn() (*sql.DB, error) {
 		return nil, fmt.Errorf(efmt, err)
 	}
 
-	return db, nil
+	return &DBase{db}, nil
 }

@@ -1,20 +1,20 @@
 package toolsvc
 
 import (
-	"database/sql"
 	"log"
 	"text/template"
 
+	"github.com/daved/gowt/dbase"
 	"github.com/daved/gowt/tmpl"
 )
 
 type ToolSvc struct {
 	log *log.Logger
-	db  *sql.DB
+	db  *dbase.DBase
 	t   *tmpl.Tmpl
 }
 
-func New(log *log.Logger, db *sql.DB, t *template.Template) *ToolSvc {
+func New(log *log.Logger, db *dbase.DBase, t *template.Template) *ToolSvc {
 	return &ToolSvc{
 		log: log,
 		db:  db,

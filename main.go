@@ -11,6 +11,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
+	"github.com/daved/gowt/dbase"
 	"github.com/daved/gowt/toolsvc"
 )
 
@@ -30,7 +31,7 @@ func main() {
 
 	log.Println("Server started on: http://localhost:8080")
 
-	db, err := dbConn()
+	db, err := dbase.New()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
