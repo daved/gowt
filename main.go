@@ -46,17 +46,17 @@ func dbConn() (*sql.DB, error) {
 	return db, nil
 }
 
-var tmpl = template.Must(template.ParseGlob("templates/*"))
-
 var noDBMsg = "no db conn"
 
 type toolSvc struct {
 	db *sql.DB
+	t  *template.Template
 }
 
-func newToolSvc(db *sql.DB) *toolSvc {
+func newToolSvc(db *sql.DB, t *template.Template) *toolSvc {
 	return &toolSvc{
 		db: db,
+		t:  t,
 	}
 }
 
@@ -87,7 +87,8 @@ func (s *toolSvc) Index(w http.ResponseWriter, r *http.Request) {
 		tool.Notes = notes
 		res = append(res, tool)
 	}
-	tmpl.ExecuteTemplate(w, "Index", res)
+
+	_ = s.t.ExecuteTemplate(w, "Index", res)
 }
 
 //Show handler
@@ -97,6 +98,7 @@ func (s *toolSvc) Show(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err.Error())
 	}
+	defer selDB.Close() //nolint
 
 	tool := Tool{}
 
@@ -117,11 +119,12 @@ func (s *toolSvc) Show(w http.ResponseWriter, r *http.Request) {
 		tool.Rating = rating
 		tool.Notes = notes
 	}
-	tmpl.ExecuteTemplate(w, "Show", tool)
+
+	_ = s.t.ExecuteTemplate(w, "Show", tool) //nolint
 }
 
-func New(w http.ResponseWriter, r *http.Request) {
-	tmpl.ExecuteTemplate(w, "New", nil)
+func (s *toolSvc) New(w http.ResponseWriter, r *http.Request) {
+	_ = s.t.ExecuteTemplate(w, "New", nil) //nolint
 }
 
 func (s *toolSvc) Edit(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +152,7 @@ func (s *toolSvc) Edit(w http.ResponseWriter, r *http.Request) {
 		tool.Notes = notes
 	}
 
-	tmpl.ExecuteTemplate(w, "Edit", tool)
+	_ = s.t.ExecuteTemplate(w, "Edit", tool) //nolint
 }
 
 func (s *toolSvc) Insert(w http.ResponseWriter, r *http.Request) {
@@ -215,15 +218,22 @@ func main() {
 	db, err := dbConn()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		return
 	}
 
-	tSvc := newToolSvc(db)
+	t, err := template.ParseGlob("templates/*")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+
+	tSvc := newToolSvc(db, t)
 
 	mux := http.NewServeMux()
 
 	mux.Handle("/", http.HandlerFunc(tSvc.Index))
 	mux.Handle("/show", http.HandlerFunc(tSvc.Show))
-	mux.Handle("/new", http.HandlerFunc(New))
+	mux.Handle("/new", http.HandlerFunc(tSvc.New))
 	mux.Handle("/edit", http.HandlerFunc(tSvc.Edit))
 	mux.Handle("/insert", http.HandlerFunc(tSvc.Insert))
 	mux.Handle("/update", http.HandlerFunc(tSvc.Update))
